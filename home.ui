@@ -150,7 +150,7 @@ border-radius:30px
 color: rgba(255, 255, 255, 255);</string>
              </property>
              <property name="text">
-              <string>By javier</string>
+              <string/>
              </property>
              <property name="alignment">
               <set>Qt::AlignCenter</set>
@@ -185,17 +185,17 @@ color: rgba(255, 255, 255, 255);</string>
            </widget>
           </item>
           <item>
-           <widget class="QFrame" name="ToggleBox">
+           <widget class="QFrame" name="MenuBox">
             <property name="minimumSize">
              <size>
               <width>200</width>
-              <height>80</height>
+              <height>0</height>
              </size>
             </property>
             <property name="maximumSize">
              <size>
               <width>200</width>
-              <height>80</height>
+              <height>16777215</height>
              </size>
             </property>
             <property name="frameShape">
@@ -204,9 +204,12 @@ color: rgba(255, 255, 255, 255);</string>
             <property name="frameShadow">
              <enum>QFrame::Raised</enum>
             </property>
-            <layout class="QVBoxLayout" name="verticalLayout_4">
+            <layout class="QVBoxLayout" name="verticalLayout_5" stretch="0,1,0,0,0,0">
              <property name="spacing">
-              <number>0</number>
+              <number>15</number>
+             </property>
+             <property name="sizeConstraint">
+              <enum>QLayout::SetDefaultConstraint</enum>
              </property>
              <property name="leftMargin">
               <number>0</number>
@@ -244,7 +247,6 @@ color: rgba(255, 255, 255, 255);</string>
                 <font>
                  <family>Nirmala UI</family>
                  <pointsize>12</pointsize>
-                 <weight>87</weight>
                  <italic>false</italic>
                  <bold>true</bold>
                 </font>
@@ -303,48 +305,6 @@ background-color: rgba(114, 129, 214, 59);
                </property>
               </widget>
              </item>
-            </layout>
-           </widget>
-          </item>
-          <item>
-           <widget class="QFrame" name="MenuBox">
-            <property name="minimumSize">
-             <size>
-              <width>200</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>200</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="frameShape">
-             <enum>QFrame::NoFrame</enum>
-            </property>
-            <property name="frameShadow">
-             <enum>QFrame::Raised</enum>
-            </property>
-            <layout class="QVBoxLayout" name="verticalLayout_5" stretch="1,0,0,0">
-             <property name="spacing">
-              <number>15</number>
-             </property>
-             <property name="sizeConstraint">
-              <enum>QLayout::SetDefaultConstraint</enum>
-             </property>
-             <property name="leftMargin">
-              <number>0</number>
-             </property>
-             <property name="topMargin">
-              <number>0</number>
-             </property>
-             <property name="rightMargin">
-              <number>0</number>
-             </property>
-             <property name="bottomMargin">
-              <number>0</number>
-             </property>
              <item>
               <widget class="QPushButton" name="src_file_button">
                <property name="minimumSize">
@@ -451,6 +411,51 @@ background-color: rgba(114, 129, 214, 59);
               </widget>
              </item>
              <item>
+              <widget class="QPushButton" name="src_web_button">
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>45</height>
+                </size>
+               </property>
+               <property name="font">
+                <font>
+                 <family>Nirmala UI</family>
+                 <pointsize>12</pointsize>
+                 <italic>false</italic>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="cursor">
+                <cursorShape>PointingHandCursor</cursorShape>
+               </property>
+               <property name="mouseTracking">
+                <bool>true</bool>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">QPushButton{
+background-image: url(:/all/img/web.png);
+background-repeat: no-repeat;
+background-position: left center;
+border: none;
+border-left: 23px solid transparent;
+
+text-align: center;
+padding-left: 0px;
+color: rgba(255, 255, 255, 199);
+font: 700 12pt &quot;Nirmala UI&quot;;
+}
+
+QPushButton:hover{
+background-color: rgba(114, 129, 214, 59);
+}</string>
+               </property>
+               <property name="text">
+                <string>Web</string>
+               </property>
+              </widget>
+             </item>
+             <item>
               <spacer name="verticalSpacer">
                <property name="orientation">
                 <enum>Qt::Vertical</enum>
@@ -463,6 +468,45 @@ background-color: rgba(114, 129, 214, 59);
                </property>
               </spacer>
              </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QFrame" name="ToggleBox">
+            <property name="minimumSize">
+             <size>
+              <width>200</width>
+              <height>80</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>200</width>
+              <height>80</height>
+             </size>
+            </property>
+            <property name="frameShape">
+             <enum>QFrame::NoFrame</enum>
+            </property>
+            <property name="frameShadow">
+             <enum>QFrame::Raised</enum>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_4">
+             <property name="spacing">
+              <number>0</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
             </layout>
            </widget>
           </item>
@@ -825,7 +869,6 @@ QPushButton:pressed {
                  <property name="font">
                   <font>
                    <pointsize>16</pointsize>
-                   <weight>75</weight>
                    <bold>true</bold>
                   </font>
                  </property>
@@ -958,7 +1001,6 @@ border: 1px outset rgb(98, 91, 213);
                            <font>
                             <family>Segoe UI</family>
                             <pointsize>16</pointsize>
-                            <weight>87</weight>
                             <italic>true</italic>
                             <bold>true</bold>
                            </font>
@@ -1043,7 +1085,6 @@ font: 700 italic 16pt &quot;Segoe UI&quot;;</string>
                            <font>
                             <family>Microsoft YaHei UI</family>
                             <pointsize>17</pointsize>
-                            <weight>50</weight>
                             <italic>false</italic>
                             <bold>false</bold>
                             <underline>false</underline>
@@ -1154,7 +1195,6 @@ border: 1px outset rgb(252, 194, 149)
                            <font>
                             <family>Segoe UI</family>
                             <pointsize>16</pointsize>
-                            <weight>87</weight>
                             <italic>true</italic>
                             <bold>true</bold>
                            </font>
@@ -1239,7 +1279,6 @@ font: 700 italic 16pt &quot;Segoe UI&quot;;</string>
                            <font>
                             <family>Microsoft YaHei UI</family>
                             <pointsize>17</pointsize>
-                            <weight>50</weight>
                             <italic>false</italic>
                             <bold>false</bold>
                             <underline>false</underline>
@@ -1350,7 +1389,6 @@ border: 1px outset rgb(153, 117, 219)
                            <font>
                             <family>Segoe UI</family>
                             <pointsize>16</pointsize>
-                            <weight>87</weight>
                             <italic>true</italic>
                             <bold>true</bold>
                            </font>
@@ -1441,7 +1479,6 @@ font: 700 italic 16pt &quot;Segoe UI&quot;;</string>
                            <font>
                             <family>Microsoft YaHei UI</family>
                             <pointsize>17</pointsize>
-                            <weight>50</weight>
                             <italic>false</italic>
                             <bold>false</bold>
                             <underline>false</underline>
@@ -1552,7 +1589,6 @@ border: 1px outset rgb(72, 158, 204)
                            <font>
                             <family>Segoe UI</family>
                             <pointsize>16</pointsize>
-                            <weight>87</weight>
                             <italic>true</italic>
                             <bold>true</bold>
                            </font>
@@ -1643,7 +1679,6 @@ font: 700 italic 16pt &quot;Segoe UI&quot;;</string>
                            <font>
                             <family>Microsoft YaHei UI</family>
                             <pointsize>15</pointsize>
-                            <weight>50</weight>
                             <italic>false</italic>
                             <bold>false</bold>
                             <underline>false</underline>
@@ -2029,7 +2064,6 @@ border-radius:15px;
                       <font>
                        <family>Nirmala UI</family>
                        <pointsize>13</pointsize>
-                       <weight>87</weight>
                        <italic>false</italic>
                        <bold>true</bold>
                       </font>
@@ -2211,7 +2245,6 @@ border-radius:15px;
                       <font>
                        <family>Nirmala UI</family>
                        <pointsize>13</pointsize>
-                       <weight>87</weight>
                        <italic>false</italic>
                        <bold>true</bold>
                       </font>
@@ -2440,7 +2473,6 @@ border-radius:15px;
                       <font>
                        <family>Nirmala UI</family>
                        <pointsize>13</pointsize>
-                       <weight>87</weight>
                        <italic>false</italic>
                        <bold>true</bold>
                       </font>
@@ -2669,7 +2701,6 @@ border-radius:15px;
                       <font>
                        <family>Nirmala UI</family>
                        <pointsize>13</pointsize>
-                       <weight>87</weight>
                        <italic>false</italic>
                        <bold>true</bold>
                       </font>
@@ -2898,7 +2929,6 @@ border-radius:15px;
                       <font>
                        <family>Nirmala UI</family>
                        <pointsize>13</pointsize>
-                       <weight>87</weight>
                        <italic>false</italic>
                        <bold>true</bold>
                       </font>

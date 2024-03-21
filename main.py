@@ -58,6 +58,9 @@ import numpy as np
 import time
 import cv2
 
+import geopandas as gpd
+import matplotlib.pyplot as plt
+
 x_axis_time_graph = []
 y_axis_count_graph = []
 video_id_count = 0
@@ -469,6 +472,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.src_file_button.clicked.connect(self.open_src_file)  # select local file
         self.src_cam_button.clicked.connect(self.chose_cam)#chose_cam
         self.src_rtsp_button.clicked.connect(self.show_status("The function has not yet been implemented."))#chose_rtsp
+        self.src_web_button.clicked.connect(self.draw_china_map)#chose_web
         # self.src_cam_button.clicked.connect(self.show_status("The function has not yet been implemented."))#chose_cam
         # self.src_rtsp_button.clicked.connect(self.show_status("The function has not yet been implemented."))#chose_rtsp
 
@@ -694,6 +698,35 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.rtsp_window.close()
         except Exception as e:
             self.show_status('%s' % e)
+
+    def draw_china_map(self):
+        # 读取美国省界的Shapefile
+        usa_map = gpd.read_file('gadm36_USA_shp/gadm36_USA_2.shp')
+
+        # 绘制美国地图
+        fig, ax = plt.subplots(figsize=(10, 10))
+        usa_map.plot(ax=ax)
+
+        # 设置地图边界颜色和宽度
+        usa_map.boundary.plot(ax=ax, edgecolor='black', linewidth=1)
+
+        # 设置标题
+        plt.title('USA Map with State Boundaries')
+
+        # 设置坐标轴的范围，聚焦于美国的主体部分
+        ax.set_xlim(-130, -65)  # 调整这些值以聚焦在所需的区域
+        ax.set_ylim(24, 50)
+
+        # 隐藏坐标轴
+        plt.axis('off')
+
+        # 保存为PNG图片
+        plt.savefig('img/china_map.png', bbox_inches='tight')
+
+        # 将图片加载到PySide6的界面中，例如显示在pre_image QLabel中
+        pixmap = QPixmap('img/china_map.png')
+        self.pre_video.setPixmap(pixmap)
+        self.pre_video.setScaledContents(True)  # 根据QLabel大小调整图片大小
 
     # Save test result button--picture/video
     def is_save_res(self):

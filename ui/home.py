@@ -89,17 +89,18 @@ class Ui_MainWindow(object):
 
         self.verticalLayout_2.addWidget(self.TopLogoInfo)
 
-        self.ToggleBox = QFrame(self.LeftMenuBg)
-        self.ToggleBox.setObjectName(u"ToggleBox")
-        self.ToggleBox.setMinimumSize(QSize(200, 80))
-        self.ToggleBox.setMaximumSize(QSize(200, 80))
-        self.ToggleBox.setFrameShape(QFrame.NoFrame)
-        self.ToggleBox.setFrameShadow(QFrame.Raised)
-        self.verticalLayout_4 = QVBoxLayout(self.ToggleBox)
-        self.verticalLayout_4.setSpacing(0)
-        self.verticalLayout_4.setObjectName(u"verticalLayout_4")
-        self.verticalLayout_4.setContentsMargins(0, 0, 0, 0)
-        self.ToggleBotton = QPushButton(self.ToggleBox)
+        self.MenuBox = QFrame(self.LeftMenuBg)
+        self.MenuBox.setObjectName(u"MenuBox")
+        self.MenuBox.setMinimumSize(QSize(200, 0))
+        self.MenuBox.setMaximumSize(QSize(200, 16777215))
+        self.MenuBox.setFrameShape(QFrame.NoFrame)
+        self.MenuBox.setFrameShadow(QFrame.Raised)
+        self.verticalLayout_5 = QVBoxLayout(self.MenuBox)
+        self.verticalLayout_5.setSpacing(15)
+        self.verticalLayout_5.setObjectName(u"verticalLayout_5")
+        self.verticalLayout_5.setSizeConstraint(QLayout.SetDefaultConstraint)
+        self.verticalLayout_5.setContentsMargins(0, 0, 0, 0)
+        self.ToggleBotton = QPushButton(self.MenuBox)
         self.ToggleBotton.setObjectName(u"ToggleBotton")
         sizePolicy1 = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         sizePolicy1.setHorizontalStretch(0)
@@ -147,22 +148,8 @@ class Ui_MainWindow(object):
         self.ToggleBotton.setAutoDefault(False)
         self.ToggleBotton.setFlat(False)
 
-        self.verticalLayout_4.addWidget(self.ToggleBotton)
+        self.verticalLayout_5.addWidget(self.ToggleBotton)
 
-
-        self.verticalLayout_2.addWidget(self.ToggleBox)
-
-        self.MenuBox = QFrame(self.LeftMenuBg)
-        self.MenuBox.setObjectName(u"MenuBox")
-        self.MenuBox.setMinimumSize(QSize(200, 0))
-        self.MenuBox.setMaximumSize(QSize(200, 16777215))
-        self.MenuBox.setFrameShape(QFrame.NoFrame)
-        self.MenuBox.setFrameShadow(QFrame.Raised)
-        self.verticalLayout_5 = QVBoxLayout(self.MenuBox)
-        self.verticalLayout_5.setSpacing(15)
-        self.verticalLayout_5.setObjectName(u"verticalLayout_5")
-        self.verticalLayout_5.setSizeConstraint(QLayout.SetDefaultConstraint)
-        self.verticalLayout_5.setContentsMargins(0, 0, 0, 0)
         self.src_file_button = QPushButton(self.MenuBox)
         self.src_file_button.setObjectName(u"src_file_button")
         self.src_file_button.setMinimumSize(QSize(0, 45))
@@ -233,13 +220,51 @@ class Ui_MainWindow(object):
 
         self.verticalLayout_5.addWidget(self.src_rtsp_button)
 
+        self.src_web_button = QPushButton(self.MenuBox)
+        self.src_web_button.setObjectName(u"src_web_button")
+        self.src_web_button.setMinimumSize(QSize(0, 45))
+        self.src_web_button.setFont(font)
+        self.src_web_button.setCursor(QCursor(Qt.PointingHandCursor))
+        self.src_web_button.setMouseTracking(True)
+        self.src_web_button.setStyleSheet(u"QPushButton{\n"
+"background-image: url(:/all/img/web.png);\n"
+"background-repeat: no-repeat;\n"
+"background-position: left center;\n"
+"border: none;\n"
+"border-left: 23px solid transparent;\n"
+"\n"
+"text-align: center;\n"
+"padding-left: 0px;\n"
+"color: rgba(255, 255, 255, 199);\n"
+"font: 700 12pt \"Nirmala UI\";\n"
+"}\n"
+"\n"
+"QPushButton:hover{\n"
+"background-color: rgba(114, 129, 214, 59);\n"
+"}")
+
+        self.verticalLayout_5.addWidget(self.src_web_button)
+
         self.verticalSpacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
 
         self.verticalLayout_5.addItem(self.verticalSpacer)
 
-        self.verticalLayout_5.setStretch(0, 1)
+        self.verticalLayout_5.setStretch(1, 1)
 
         self.verticalLayout_2.addWidget(self.MenuBox)
+
+        self.ToggleBox = QFrame(self.LeftMenuBg)
+        self.ToggleBox.setObjectName(u"ToggleBox")
+        self.ToggleBox.setMinimumSize(QSize(200, 80))
+        self.ToggleBox.setMaximumSize(QSize(200, 80))
+        self.ToggleBox.setFrameShape(QFrame.NoFrame)
+        self.ToggleBox.setFrameShadow(QFrame.Raised)
+        self.verticalLayout_4 = QVBoxLayout(self.ToggleBox)
+        self.verticalLayout_4.setSpacing(0)
+        self.verticalLayout_4.setObjectName(u"verticalLayout_4")
+        self.verticalLayout_4.setContentsMargins(0, 0, 0, 0)
+
+        self.verticalLayout_2.addWidget(self.ToggleBox)
 
         self.VersionInfo = QFrame(self.LeftMenuBg)
         self.VersionInfo.setObjectName(u"VersionInfo")
@@ -1550,12 +1575,13 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"MainWindow", None))
-        self.Author.setText(QCoreApplication.translate("MainWindow", u"By javier", None))
+        self.Author.setText("")
         self.Title.setText(QCoreApplication.translate("MainWindow", u"YoloSide", None))
         self.ToggleBotton.setText(QCoreApplication.translate("MainWindow", u"Hide", None))
         self.src_file_button.setText(QCoreApplication.translate("MainWindow", u"Local File", None))
         self.src_cam_button.setText(QCoreApplication.translate("MainWindow", u"Camera", None))
         self.src_rtsp_button.setText(QCoreApplication.translate("MainWindow", u"Rtsp", None))
+        self.src_web_button.setText(QCoreApplication.translate("MainWindow", u"Web", None))
         self.VersionLabel.setText(QCoreApplication.translate("MainWindow", u"Version: 1.0", None))
         self.explain_title.setText(QCoreApplication.translate("MainWindow", u"YoloSide App  \u2013  A Graphical User Interface For YoloV8", None))
         self.settings_button.setText("")
