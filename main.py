@@ -1,3 +1,4 @@
+import os
 import re
 import traceback
 
@@ -20,7 +21,7 @@ from ultralytics.cfg import get_cfg
 # from ultralytics.yolo.cfg import get_cfg
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMenu
-from PySide6.QtGui import QImage, QPixmap, QColor
+from PySide6.QtGui import QImage, QPixmap, QColor,QCursor
 from PySide6.QtCore import QTimer, QThread, Signal, QObject, QPoint, Qt
 from ui.CustomMessageBox import MessageBox
 from ui.home import Ui_MainWindow
@@ -36,24 +37,52 @@ import json
 import torch
 import sys
 import cv2
-import os
+
+import supervision as sv
+from ultralytics import YOLO
+from ultralytics.data.loaders import LoadStreams
+
+from ultralytics.engine.predictor import BasePredictor
+from ultralytics.utils import DEFAULT_CFG, SETTINGS
+from ultralytics.utils.torch_utils import smart_inference_mode
+from ultralytics.utils.files import increment_path
+from ultralytics.cfg import get_cfg
+from ultralytics.utils.checks import check_imshow
+
+from PySide6.QtCore import Signal, QObject
+
+from PIL import Image
+from pathlib import Path
+import datetime
+import numpy as np
+import time
+import cv2
+
+x_axis_time_graph = []
+y_axis_count_graph = []
+video_id_count = 0
 
 
 class YoloPredictor(BasePredictor, QObject):
-    yolo2main_pre_img = Signal(np.ndarray)   # raw image signal
-    yolo2main_res_img = Signal(np.ndarray)   # test result signal
-    yolo2main_status_msg = Signal(str)       # Detecting/pausing/stopping/testing complete/error reporting signal
-    yolo2main_fps = Signal(str)              # fps
-    yolo2main_labels = Signal(dict)          # Detected target results (number of each category)
-    yolo2main_progress = Signal(int)         # Completeness
-    yolo2main_class_num = Signal(int)        # Number of categories detected
-    yolo2main_target_num = Signal(int)       # Targets detected
+    yolo2main_trail_img = Signal(np.ndarray)  # 轨迹图像信号
+    yolo2main_box_img = Signal(np.ndarray)  # 绘制了标签与锚框的图像的信号
+    yolo2main_status_msg = Signal(str)  # 检测/暂停/停止/测试完成等信号
+    yolo2main_fps = Signal(str)  # fps
+
+    yolo2main_labels = Signal(dict)  # 检测到的目标结果（每个类别的数量）
+    yolo2main_progress = Signal(int)  # 进度条
+    yolo2main_class_num = Signal(int)  # 当前帧类别数
+    yolo2main_target_num = Signal(int)  # 当前帧目标数
+
 
     def __init__(self, cfg=DEFAULT_CFG, overrides=None):
         super(YoloPredictor, self).__init__()
         QObject.__init__(self)
 
-        self.args = get_cfg(cfg, overrides)
+        try:
+            self.args = get_cfg(cfg, overrides)
+        except:
+            pass
         project = self.args.project or Path(SETTINGS['runs_dir']) / self.args.task
         name = f'{self.args.mode}'
         self.save_dir = increment_path(Path(project) / name, exist_ok=self.args.exist_ok)
@@ -62,296 +91,321 @@ class YoloPredictor(BasePredictor, QObject):
             self.args.show = check_imshow(warn=True)
 
         # GUI args
-        self.used_model_name = None      # The detection model name to use
-        self.new_model_name = None       # Models that change in real time
-        self.source = ''                 # input source
-        self.stop_dtc = False            # Termination detection
-        self.continue_dtc = True         # pause
-        self.save_res = False            # Save test results
-        self.save_txt = False            # save label(txt) file
-        self.iou_thres = 0.45            # iou
-        self.conf_thres = 0.25           # conf
-        self.speed_thres = 10            # delay, ms
-        self.labels_dict = {}            # return a dictionary of results
-        self.progress_value = 0          # progress bar
+        self.used_model_name = None  # 使用过的检测模型名称
+        self.new_model_name = None  # 新更改的模型
+
+        self.source = ''  # 输入源str
+        self.progress_value = 0  # 进度条的值
+
+        self.stop_dtc = False  # 终止bool
+        self.continue_dtc = True  # 暂停bool
 
 
-        # Usable if setup is done
-        self.model = None
-        self.data = self.args.data  # data_dict
-        self.imgsz = None
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.dataset = None
-        self.vid_path, self.vid_writer = None, None
-        self.annotator = None
-        self.data_path = None
-        self.source_type = None
-        self.batch = None
-        self.callbacks = defaultdict(list, callbacks.default_callbacks)  # add callbacks
-        callbacks.add_integration_callbacks(self)
+        # config
+        self.iou_thres = 0.45  # iou
+        self.conf_thres = 0.25  # conf
+        self.speed_thres = 0.01  # delay, ms （缓冲）
 
-    # main for detect
-    @smart_inference_mode()
+        self.save_res = False  # 保存MP4
+        self.save_txt = False  # 保存txt
+        self.save_res_path = "pre_result"
+        self.save_txt_path = "pre_labels"
+
+        self.show_labels = True  # 显示图像标签bool
+        self.show_trace = False  # 显示图像轨迹bool
+
+
+        # 运行时候的参数放这里
+        self.start_time = None  # 拿来算FPS的计数变量
+        self.count = None
+        self.sum_of_count = None
+        self.class_num = None
+        self.total_frames = None
+        self.lock_id = None
+
+        # 设置线条样式    厚度 & 缩放大小
+        self.box_annotator = sv.BoxAnnotator(
+            thickness=2,
+            text_thickness=1,
+            text_scale=0.5
+        )
+
+    # 点击开始检测按钮后的检测事件
+    @smart_inference_mode()  # 一个修饰器，用来开启检测模式：如果torch>=1.9.0，则执行torch.inference_mode()，否则执行torch.no_grad()
     def run(self):
-        try:
-            if self.args.verbose:
-                LOGGER.info('')
+        self.yolo2main_status_msg.emit('正在加载模型...')
+        LoadStreams.capture = ''
+        self.count = 0                 # 拿来参与算FPS的计数变量
+        self.start_time = time.time()  # 拿来算FPS的计数变量
+        global video_id_count
 
-            # set model
-            self.yolo2main_status_msg.emit('Loding Model...')
-            print(f"Running inference on device: {self.device}")
-            if not self.model:
-                self.setup_model(self.new_model_name)
-                self.used_model_name = self.new_model_name
+        # 检查保存路径
+        if self.save_txt:
+            self.check_path(self.save_txt_path)
+        if self.save_res:
+            self.check_path(self.save_res_path)
 
-            # set source
-            self.setup_source(self.source if self.source is not None else self.args.source)
+        model = self.load_yolo_model()
 
-            # Check save path/label
-            if self.save_res or self.save_txt:
-                (self.save_dir / 'labels' if self.save_txt else self.save_dir).mkdir(parents=True, exist_ok=True)
+        # 获取数据源 （不同的类型获取不同的数据源）
+        iter_model = iter(
+            model.track(source=self.source, show=False, stream=True, iou=self.iou_thres, conf=self.conf_thres))
 
-            # warmup model
-            if not self.done_warmup:
-                self.model.warmup(imgsz=(1 if self.model.pt or self.model.triton else self.dataset.bs, 3, *self.imgsz))
-                self.done_warmup = True
+        # 折线图数据初始化
+        global x_axis_time_graph, y_axis_count_graph
+        x_axis_time_graph = []
+        y_axis_count_graph = []
 
-            self.seen, self.windows, self.dt, self.batch = 0, [], (ops.Profile(), ops.Profile(), ops.Profile()), None
+        self.yolo2main_status_msg.emit('检测中...')
 
-            # start detection
-            # for batch in self.dataset:
+        # 使用OpenCV读取视频——获取进度条
+        if 'mp4' in self.source or 'avi' in self.source or 'mkv' in self.source or 'flv' in self.source or 'mov' in self.source:
+            cap = cv2.VideoCapture(self.source)
+            self.total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+            cap.release()
 
-            count = 0                       # run location frame
-            start_time = time.time()        # used to calculate the frame rate
-            batch = iter(self.dataset)
+        # 如果保存，则创建写入对象
+        img_res, result, height, width = self.recognize_res(iter_model)
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        out = None  # 视频写出变量
+        if self.save_res:
+            out = cv2.VideoWriter(f'{self.save_res_path}/video_result_{video_id_count}.mp4', fourcc, 25,
+                                  (width, height), True)  # 保存检测视频的路径
+
+        # 开始死循环检测
+        while True:
             try:
-                while True:
-                    # Termination detection
-                    if self.stop_dtc:
-                        for writer in self.vid_writer.values():
-                            if isinstance(writer, cv2.VideoWriter):
-                                writer.release()  # 释放 video writer
-                        self.vid_writer.clear()  # 清空字典
-                        self.yolo2main_status_msg.emit('Detection terminated!')
-                        break
+                # 暂停与开始
+                if self.continue_dtc:
+                    img_res, result, height, width = self.recognize_res(iter_model)
+                    print('result:', result)
+                    self.res_address(img_res, result, height, width, model, out)
 
-                    # Change the model midway
-                    if self.used_model_name != self.new_model_name:
-                        # self.yolo2main_status_msg.emit('Change Model...')
-                        self.setup_model(self.new_model_name)
-                        self.used_model_name = self.new_model_name
+                # 终止
+                if self.stop_dtc:
+                    if self.save_res:
+                        if out:
+                            out.release()
+                            video_id_count += 1
+                    self.source = None
+                    self.yolo2main_status_msg.emit('检测终止')
+                    self.release_capture()  # 这里是为了终止使用摄像头检测函数的线程，改了yolo源码
+                    break
 
-                    # pause switch
-                    if self.continue_dtc:
-                        # time.sleep(0.001)
-                        self.yolo2main_status_msg.emit('Detecting...')
-                        batch = next(self.dataset)  # next data
 
-                        self.batch = batch
+            # 检测截止（本地文件检测）
+            except StopIteration:
+                if self.save_res:
+                    out.release()
+                    video_id_count += 1
+                    print('writing complete')
+                self.yolo2main_status_msg.emit('检测完成')
+                self.yolo2main_progress.emit(1000)
+                # cv2.destroyAllWindows()  # 单目标追踪停止！
+                self.source = None
 
-                        paths, im0s, s = batch  # 正确解包前三个元素
-                        paths = ' '.join(paths) if isinstance(paths, list) else paths  # 将路径列表转换为字符串
-                        s = ' '.join(s) if isinstance(s, list) else s  # 将s列表转换为字符串
-                        vid_cap = self.dataset.cap  # 假设vid_cap不在batch中，并将其设置为None或适当的默认值
-                        print('vid_cap:', vid_cap)  # None
-
-                        im0s = np.array(im0s)  # 将列表转换为numpy数组
-                        print('im0s.shape :', im0s.shape)  # (1, 640, 640, 3)
-
-                        # Preprocess
-                        with self.dt[0]:
-                            im = self.preprocess(im0s)  # (1, 3, 640, 640)
-                        print('im.shape :', im.shape)  # (1, 640, 640, 3)
-
-                        for idx, im0s in enumerate(im0s):
-                            print('im0s.shape :', im0s.shape)  # (640, 640, 3)
-                            if im0s.shape[0] == 1:
-                                im0s = np.squeeze(im0s, axis=0)
-
-                            visualize = increment_path(self.save_dir / Path(paths).stem,
-                                                       mkdir=True) if self.args.visualize else False
-
-                            # Calculation completion and frame rate (to be optimized)
-                            count += 1  # frame count +1
-
-                            if vid_cap:
-                                all_count = vid_cap.get(cv2.CAP_PROP_FRAME_COUNT)  # total frames
-                            else:
-                                all_count = 1
-                            self.progress_value = int(count / all_count * 1000)  # progress bar(0~1000)
-
-                            print('count:', count)
-                            if count % 5 == 0 and count >= 5:  # Calculate the frame rate every 5 frames
-                                self.yolo2main_fps.emit(str(int(5 / (time.time() - start_time))))
-                                start_time = time.time()
-
-                            # inference
-                            with self.dt[1]:
-                                preds = self.model(im, augment=self.args.augment, visualize=visualize)
-
-                            # postprocess
-                            with self.dt[2]:
-                                self.results = self.postprocess(preds, im, im0s)
-
-                            # Visualize, save, write results
-                            n = len(im)
-                            # print('shape im', im.shape)
-                            # print('len im', len(im))
-                            # print('shape im0s', im0s.shape)
-                            # print('len im0s', len(im0s))
-                            for i in range(n):
-                                self.seen += 1
-                                self.results[i].speed = {
-                                    'preprocess': self.dt[0].dt * 1E3 / n,
-                                    'inference': self.dt[1].dt * 1E3 / n,
-                                    'postprocess': self.dt[2].dt * 1E3 / n
-                                }
-                                p, im0 = (
-                                paths[i], im0s[i].copy()) if self.source_type.stream or self.source_type.from_img \
-                                    else (paths, im0s.copy())
-
-                                p = Path(p)  # the source dir
-                                if self.args.verbose or self.args.save or self.args.save_txt or self.args.show:
-                                    label_str = self.write_results(i, Path(paths[i]), im, im0, s)
-
-                                # labels and nums dict
-                                class_nums = 0
-                                target_nums = 0
-                                self.labels_dict = {}
-                                if 'no detections' in label_str:
-                                    pass
-                                else:
-                                    for ii in label_str.split(',')[:-1]:
-                                        nums, label_name = ii.split('~')
-                                        self.labels_dict[label_name] = int(nums)
-                                        target_nums += int(nums)
-                                        class_nums += 1
-
-                                # save img or video result
-                                if self.save_res:
-                                    self.save_preds(vid_cap, i, str(self.save_dir / p.name))
-
-                                # print('results im0',im0.shape)
-                                # print('results im0s',im0s.shape)
-                                # Send test results
-                                self.yolo2main_res_img.emit(im0)  # after detection
-                                self.yolo2main_pre_img.emit(
-                                    im0s if isinstance(im0s, np.ndarray) else im0s[0])  # Before testing
-                                # self.yolo2main_labels.emit(self.labels_dict)        # webcam need to change the def write_results
-                                self.yolo2main_class_num.emit(class_nums)
-                                self.yolo2main_target_num.emit(target_nums)
-
-                                if self.speed_thres != 0:
-                                    time.sleep(self.speed_thres / 1000)  # delay , ms
-
-                            self.yolo2main_progress.emit(self.progress_value)  # progress bar
-
-                        # Detection completed
-                    if count + 1 >= all_count:
-                        for writer in self.vid_writer.values():
-                            if isinstance(writer, cv2.VideoWriter):
-                                writer.release()  # 释放 video writer
-                        self.vid_writer.clear()  # 清空字典
-                        self.yolo2main_status_msg.emit('Detection completed')
-                        break
-
-            except Exception as e:
-                print(f"Error on line {sys.exc_info()[-1].tb_lineno}: {str(e)}")
-                print(traceback.format_exc())
-
-        except Exception as e:
+                break
+        try:
+            out.release()
+        except:
             pass
-            print(e)
-            self.yolo2main_status_msg.emit('%s' % e)
+
+    # 进行识别——并返回所有结果
+    def res_address(self, img_res, result, height, width, model, out):
+            # 复制一份
+            img_box = np.copy(img_res)   # 右边的图（会绘制标签！） img_res是原图-不会受影响
+            img_trail = np.copy(img_res) # 左边的图
+
+            # 如果没有识别的：
+            if result.boxes.id is None:
+                # 目标都是0
+                self.sum_of_count = 0
+                self.class_num = 0
+                labels_write = "暂未识别到目标！"
+            # 如果有识别的
+            else:
+                detections = sv.Detections.from_yolov8(result)
+                detections.tracker_id = result.boxes.id.cpu().numpy().astype(int)
+
+                # id 、位置、目标总数
+                self.class_num = self.get_class_number(detections)  # 类别数
+                id = detections.tracker_id  # id
+                xyxy = detections.xyxy  # 位置
+                self.sum_of_count = len(id)  # 目标总数
+
+                # 轨迹绘制部分 @@@@@@@@@@@@@@@@@@@@@@@@@@@@
+                if self.show_trace:
+                    img_trail = np.zeros((height, width, 3), dtype='uint8')  # 黑布
+                    identities = id
+                    grid_color = (255, 255, 255)
+                    line_width = 1
+                    grid_size = 100
+                    for y in range(0, height, grid_size):
+                        cv2.line(img_trail, (0, y), (width, y), grid_color, line_width)
+                    for x in range(0, width, grid_size):
+                        cv2.line(img_trail, (x, 0), (x, height), grid_color, line_width)
+                    # draw_trail(img_trail, xyxy, model.model.names, id, identities)
+                else:
+                    img_trail = img_res  # 显示原图
+
+                # 画标签到图像上（并返回要写下的信息
+                labels_write, img_box = self.creat_labels(detections, img_box , model)
 
 
-    def get_annotator(self, img):
-        return Annotator(img, line_width=3, example=str(self.model.names))
+            # 写入txt——存储labels里的信息
+            if self.save_txt:
+                with open(f'{self.save_txt_path}/result.txt', 'a') as f:
+                    f.write('当前时刻屏幕信息:' +
+                            str(labels_write) +
+                            f'检测时间: {datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")}' +
+                            f' 路段通过的目标总数: {self.sum_of_count}')
+                    f.write('\n')
+
+            # 预测视频写入本地
+            if self.save_res:
+                out.write(img_box)
+
+            # 添加 折线图数据
+            now = datetime.datetime.now()
+            new_time = now.strftime("%Y-%m-%d %H:%M:%S")
+            if new_time not in x_axis_time_graph:  # 防止同一秒写入
+                x_axis_time_graph.append(new_time)
+                y_axis_count_graph.append(self.sum_of_count)
 
 
-    def postprocess(self, preds, img, orig_img):
-        ### important
-        preds = ops.non_max_suppression(preds,
-                                        self.conf_thres,
-                                        self.iou_thres,
-                                        agnostic=self.args.agnostic_nms,
-                                        max_det=self.args.max_det,
-                                        classes=self.args.classes)
+            # 抠锚框里的图  （单目标追踪）
+            if self.lock_id is not None:
+                self.lock_id = int(self.lock_id)
+                self.open_target_tracking(detections=detections, img_res=img_res)
 
-        results = []
-        for i, pred in enumerate(preds):
-            orig_img = orig_img[i] if isinstance(orig_img, list) else orig_img
-            shape = orig_img.shape
-            pred[:, :4] = ops.scale_boxes(img.shape[2:], pred[:, :4], shape).round()
-            path, _, _ = self.batch
-            img_path = path[i] if isinstance(path, list) else path
-            results.append(Results(orig_img=orig_img, path=img_path, names=self.model.names, boxes=pred))
-        # print(results)
-        return results
+            # 传递信号给主窗口
+            self.emit_res(img_trail, img_box)
 
-    # def write_results(self, idx, results, batch):
-    def write_results(self, idx, p, im, im0, s):
-        # p, im, im0 = batch
-        # print('result shape of im:',im.shape) # [1, 3, 640, 640])
-        # im0 = np.stack((im[0][2], im[0][1], im[0][0]), axis=-1)
-        # print('result shape of im0:',im0.shape) # (640, 640, 3)
+    # 识别结果处理
+    def recognize_res(self, iter_model):
+            # 检测 ---然后获取有用的数据
+            result = next(iter_model)  # 这里是检测的核心，每次循环都会检测一帧图像,可以自行打印result看看里面有哪些key可以用
+            img_res = result.orig_img  # 原图
+            height, width, _ = img_res.shape
 
-        log_string = ''
-        if len(im.shape) == 3:
-            im = im[None]  # expand for batch dim
-        self.seen += 1
-        imc = im0.copy() if self.args.save_crop else im0
-        if self.source_type.stream or self.source_type.from_img:  # batch_size >= 1         # attention
-            log_string += f'{idx}: '
-            frame = self.dataset.count
+            return img_res, result, height, width
+
+    # 单目标检测窗口开启
+    def open_target_tracking(self, detections, img_res):
+        try:
+            # 单目标追踪 ！！！！！
+            result_cropped = self.single_object_tracking(detections, img_res)
+            # print(result_cropped)
+            cv2.imshow(f'OBJECT-ID:{self.lock_id}', result_cropped)
+            cv2.moveWindow(f'OBJECT-ID:{self.lock_id}', 0, 0)
+            # press esc to quit
+            if cv2.waitKey(5) & 0xFF == 27:
+                self.lock_id = None
+                cv2.destroyAllWindows()
+        except:
+            cv2.destroyAllWindows()
+            pass
+
+    # 单目标跟踪
+    def single_object_tracking(self, detections, img_box):
+        store_xyxy_for_id = {}
+        for xyxy, id in zip(detections.xyxy, detections.tracker_id):
+            store_xyxy_for_id[id] = xyxy
+            mask = np.zeros_like(img_box)
+        try:
+            if self.lock_id not in detections.tracker_id:
+                cv2.destroyAllWindows()
+                self.lock_id = None
+            x1, y1, x2, y2 = int(store_xyxy_for_id[self.lock_id][0]), int(store_xyxy_for_id[self.lock_id][1]), int(
+                store_xyxy_for_id[self.lock_id][2]), int(store_xyxy_for_id[self.lock_id][3])
+            cv2.rectangle(mask, (x1, y1), (x2, y2), (255, 255, 255), -1)
+            result_mask = cv2.bitwise_and(img_box, mask)
+            result_cropped = result_mask[y1:y2, x1:x2]
+            result_cropped = cv2.resize(result_cropped, (256, 256))
+            return result_cropped
+
+        except:
+            cv2.destroyAllWindows()
+            pass
+
+    def check_path(path):
+        if not os.path.exists(path):
+            os.mkdir(path)
+
+    # 信号发送区
+    def emit_res(self, img_trail, img_box):
+
+        time.sleep(self.speed_thres/1000)  # 缓冲
+        # 轨迹图像（左边）
+        self.yolo2main_trail_img.emit(img_trail)
+        # 标签图（右边）
+        self.yolo2main_box_img.emit(img_box)
+        # 总类别数量 、 总目标数
+        self.yolo2main_class_num.emit(self.class_num)
+        self.yolo2main_target_num.emit(self.sum_of_count)
+        # 进度条
+        if '0' in self.source or 'rtsp' in self.source:
+            self.yolo2main_progress.emit(0)
         else:
-            frame = getattr(self.dataset, 'frame', 0)
-        self.data_path = p
-        self.txt_path = str(self.save_dir / 'labels' / p.stem) + ('' if self.dataset.mode == 'image' else f'_{frame}')
-        # log_string += '%gx%g ' % im.shape[2:]         # !!! don't add img size~
+            self.progress_value = int(self.count / self.total_frames * 1000)
+            self.yolo2main_progress.emit(self.progress_value)
+        # 计算FPS
+        self.count += 1
+        if self.count % 3 == 0 and self.count >= 3:  # 计算FPS
+            self.yolo2main_fps.emit(str(int(3 / (time.time() - self.start_time))))
+            self.start_time = time.time()
 
-        self.annotator = self.get_annotator(im0)
+    # 加载模型
+    def load_yolo_model(self):
+        if self.used_model_name != self.new_model_name:
+            self.setup_model(self.new_model_name)
+            self.used_model_name = self.new_model_name
+        return YOLO(self.new_model_name)
 
+    # 画标签到图像上
+    def creat_labels(self, detections, img_box, model):
+        # 要画出来的信息
+        labels_draw = [
+            f"ID: {tracker_id} {model.model.names[class_id]}"
+            for _, _, confidence, class_id, tracker_id in detections
+        ]
+        '''
+        如果Torch装的是cuda版本的话：302行的代码需改成：
+          labels_draw = [
+            f"OBJECT-ID: {tracker_id} CLASS: {model.model.names[class_id]} CF: {confidence:0.2f}"
+            for _,confidence,class_id,tracker_id in detections
+        ]
+        '''
+        # 存储labels里的信息
+        labels_write = [
+            f"目标ID: {tracker_id} 目标类别: {class_id} 置信度: {confidence:0.2f}"
+            for _, _, confidence, class_id, tracker_id in detections
+        ]
+        '''
+          如果Torch装的是cuda版本的话：314行的代码需改成：
+          labels_write = [
+            f"OBJECT-ID: {tracker_id} CLASS: {model.model.names[class_id]} CF: {confidence:0.2f}"
+            for _,confidence,class_id,tracker_id in detections
+        ]
+        '''
 
-        det = self.results[idx].boxes  # TODO: make boxes inherit from tensors
-        # print('det:',det)
-        # print('len of det:',len(det))
-        if len(det) == 0:
-            return f'{log_string}(no detections), '  # if no, send this~~
+        # 如果显示标签 （要有才可以画呀！）---否则就是原图
+        if (self.show_labels == True) and (self.class_num != 0):
+            img_box = self.box_annotator.annotate(scene=img_box, detections=detections, labels=labels_draw)
 
-        for c in det.cls.unique():
-            n = (det.cls == c).sum()  # detections per class
-            log_string += f"{n}~{self.model.names[int(c)]},"  # {'s' * (n > 1)}, "   # don't add 's'
-        # now log_string is the classes 👆
+        return labels_write, img_box
 
-        # write
-        for d in reversed(det):
-            cls, conf = d.cls.squeeze(), d.conf.squeeze()
-            if self.save_txt:  # Write to file
-                line = (cls, *(d.xywhn.view(-1).tolist()), conf) \
-                    if self.args.save_conf else (cls, *(d.xywhn.view(-1).tolist()))  # label format
-                with open(f'{self.txt_path}.txt', 'a') as f:
-                    f.write(('%g ' * len(line)).rstrip() % line + '\n')
-            if self.save_res or self.args.save_crop or self.args.show or True:  # Add bbox to image(must)
-                c = int(cls)  # integer class
-                name = f'id:{int(d.id.item())} {self.model.names[c]}' if d.id is not None else self.model.names[c]
+    # 获取类别数
+    def get_class_number(self, detections):
+        class_num_arr = []
+        for each in detections.class_id:
+            if each not in class_num_arr:
+                class_num_arr.append(each)
+        return len(class_num_arr)
 
-                label = f'{name} {conf:.2f}'
-                # 在绘制前打印信息
-                print(f'准备绘制目标框和标签，目标类别为: {label}')
-
-                self.annotator.box_label(d.xyxy.squeeze(), label, color=colors(c, True))
-
-                # 在绘制后打印信息
-                print(f'已绘制目标框和标签: {label}')
-            if self.args.save_crop:
-                save_one_box(d.xyxy,
-                             imc,
-                             file=self.save_dir / 'crops' / self.model.model.names[c] / f'{self.data_path.stem}.jpg',
-                             BGR=True)
-
-        return log_string
-
+    # 释放摄像头
+    def release_capture(self):
+        LoadStreams.capture = 'release'  # 这里是为了终止使用摄像头检测函数的线程，改了yolo源码
 
 class MainWindow(QMainWindow, Ui_MainWindow):
     main2yolo_begin_sgl = Signal()  # The main window sends an execution signal to the yolo instance
@@ -385,8 +439,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.select_model = self.model_box.currentText()                   # default model
         self.yolo_predict.new_model_name = "./models/%s" % self.select_model
         self.yolo_thread = QThread()                                  # Create yolo thread
-        self.yolo_predict.yolo2main_pre_img.connect(lambda x: self.show_image(x, self.pre_video))
-        self.yolo_predict.yolo2main_res_img.connect(lambda x: self.show_image(x, self.res_video))
+        self.yolo_predict.yolo2main_trail_img.connect(lambda x: self.show_image(x, self.pre_video))
+        self.yolo_predict.yolo2main_box_img.connect(lambda x: self.show_image(x, self.res_video))
         self.yolo_predict.yolo2main_status_msg.connect(lambda x: self.show_status(x))
         self.yolo_predict.yolo2main_fps.connect(lambda x: self.fps_label.setText(x))
         # self.yolo_predict.yolo2main_labels.connect(self.show_labels)
@@ -413,6 +467,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Select detection source
         self.src_file_button.clicked.connect(self.open_src_file)  # select local file
+        self.src_cam_button.clicked.connect(self.chose_cam)#chose_cam
+        self.src_rtsp_button.clicked.connect(self.show_status("The function has not yet been implemented."))#chose_rtsp
         # self.src_cam_button.clicked.connect(self.show_status("The function has not yet been implemented."))#chose_cam
         # self.src_rtsp_button.clicked.connect(self.show_status("The function has not yet been implemented."))#chose_rtsp
 
@@ -433,11 +489,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     @staticmethod
     def show_image(img_src, label):
         try:
-            ih, iw, _ = img_src.shape
+            # 检查图像的通道数，确定图像是否为彩色图像
+            if len(img_src.shape) == 3:
+                ih, iw, _ = img_src.shape
+            if len(img_src.shape) == 2:
+                ih, iw = img_src.shape
+
+            # 根据标签窗口的大小调整图像的大小
             w = label.geometry().width()
             h = label.geometry().height()
-            # keep the original data ratio
-            if iw/w > ih/h:
+
+            # 根据图像宽高比例进行缩放
+            if iw / w > ih / h:
                 scal = w / iw
                 nw = w
                 nh = int(scal * ih)
@@ -449,9 +512,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 nh = h
                 img_src_ = cv2.resize(img_src, (nw, nh))
 
+            # 将OpenCV图像从BGR格式转换为RGB格式，并创建QImage对象
             frame = cv2.cvtColor(img_src_, cv2.COLOR_BGR2RGB)
             img = QImage(frame.data, frame.shape[1], frame.shape[0], frame.shape[2] * frame.shape[1],
                          QImage.Format_RGB888)
+
+            # 在标签窗口中显示图像
             label.setPixmap(QPixmap.fromImage(img))
 
         except Exception as e:
@@ -459,25 +525,61 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     # Control start/pause
     def run_or_continue(self):
-        if self.yolo_predict.source == '':
-            self.show_status('Please select a video source before starting detection...')
+        # 检测是否有模型
+        if self.yolo_predict.new_model_name == '' or self.yolo_predict.new_model_name == None:
+            # Todo: 添加对话
+            # DialogOver(parent=self, text="请检测模型", title="运行失败", flags="danger")
             self.run_button.setChecked(False)
-        else:
-            self.yolo_predict.stop_dtc = False
-            if self.run_button.isChecked():
-                self.run_button.setChecked(True)    # start button
-                self.save_txt_button.setEnabled(False)  # It is forbidden to check and save after starting the detection
-                self.save_res_button.setEnabled(False)
-                self.show_status('Detecting...')
-                self.yolo_predict.continue_dtc = True   # Control whether Yolo is paused
-                if not self.yolo_thread.isRunning():
-                    self.yolo_thread.start()
-                    self.main2yolo_begin_sgl.emit()
+            return
+        # 检测输入源
+        if self.yolo_predict.source == '' or self.yolo_predict.source == None:
+            self.show_status('请在检测前选择输入源...')
+            self.run_button.setChecked(False)
+            # DialogOver(parent=self, text="请检测输入源", title="运行失败", flags="danger")
+            return
 
-            else:
-                self.yolo_predict.continue_dtc = False
-                self.show_status("Pause...")
-                self.run_button.setChecked(False)    # start button
+        self.yolo_predict.stop_dtc = False # 线程开始
+
+        # 开始
+        if self.run_button.isChecked():
+
+            # 图片预测
+            file_extension = self.yolo_predict.source[-3:].lower()
+            if file_extension == 'png' or file_extension == 'jpg':
+                self.img_predict()
+                return
+
+            # 视频预测
+            # DialogOver(parent=self, text="开始检测...", title="运行成功", flags="success")
+            self.run_button.setChecked(True)
+
+
+            # self.draw_thread.run_continue()  # 折线图开始
+
+            # 不可再改变设置（config动态调整 关闭）
+            self.save_txt_button.setEnabled(False)
+            self.save_res_button.setEnabled(False)
+            self.conf_slider.setEnabled(False)
+            self.iou_slider.setEnabled(False)
+            self.speed_slider.setEnabled(False)
+
+            self.show_status('检测中...')
+            if '0' in self.yolo_predict.source or 'rtsp' in self.yolo_predict.source:
+                self.progress_bar.setFormat('实时视频流检测中...')
+            if 'avi' in self.yolo_predict.source or 'mp4' in self.yolo_predict.source:
+                self.progress_bar.setFormat("当前检测进度:%p%")
+            self.yolo_predict.continue_dtc = True
+            # 开始检测
+            if not self.yolo_thread.isRunning():
+                self.yolo_thread.start()
+                self.main2yolo_begin_sgl.emit()
+        # 暂停
+        else:
+            # self.draw_thread.pause()  # 折线图暂停
+            self.yolo_predict.continue_dtc = False
+            self.show_status("暂停...")
+            # DialogOver(parent=self, text="已暂停检测", title="运行暂停", flags="warning")
+            self.run_button.setChecked(False)
 
     # bottom status bar information
     def show_status(self, msg):
@@ -521,17 +623,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     # Select camera source----  have one bug
     def chose_cam(self):
-        try:
-            self.stop()
-            MessageBox(
-                self.close_button, title='Note', text='loading camera...', time=2000, auto=True).exec()
-            # get the number of local cameras
-            _, cams = Camera().get_cam_num()
-            popMenu = QMenu()
-            popMenu.setFixedWidth(self.src_cam_button.width())
-            popMenu.setStyleSheet('''
+        # try:
+        # 关闭YOLO线程
+        self.stop()
+        # 获取本地摄像头数量
+        _, cams = Camera().get_cam_num()
+        popMenu = QMenu()
+        popMenu.setFixedWidth(self.src_cam_button.width())
+        popMenu.setStyleSheet('''
                                             QMenu {
-                                            font-size: 16px;
+                                            font-size: 20px;
                                             font-family: "Microsoft YaHei UI";
                                             font-weight: light;
                                             color:white;
@@ -541,26 +642,25 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                                             padding-bottom: 4px;
                                             border-style: solid;
                                             border-width: 0px;
-                                            border-color: rgba(255, 255, 255, 255);
+                                            border-color: rgba(255, 212, 255, 255);
                                             border-radius: 3px;
-                                            background-color: rgba(200, 200, 200,50);}
+                                            background-color: rgba(16,155,226,50);
+                                            }
                                             ''')
 
-            for cam in cams:
-                exec("action_%s = QAction('%s')" % (cam, cam))
-                exec("popMenu.addAction(action_%s)" % cam)
+        for cam in cams:
+            exec("action_%s = QAction('%s 号摄像头')" % (cam, cam))
+            exec("popMenu.addAction(action_%s)" % cam)
+        pos = QCursor.pos()
+        action = popMenu.exec(pos)
 
-            x = self.src_cam_button.mapToGlobal(self.src_cam_button.pos()).x()
-            y = self.src_cam_button.mapToGlobal(self.src_cam_button.pos()).y()
-            y = y + self.src_cam_button.frameGeometry().height()
-            pos = QPoint(x, y)
-            action = popMenu.exec(pos)
-            if action:
-                self.yolo_predict.source = action.text()
-                self.show_status('Loading camera：{}'.format(action.text()))
-
-        except Exception as e:
-            self.show_status('%s' % e)
+        # 设置摄像头来源
+        if action:
+            str_temp = ''
+            selected_stream_source = str_temp.join(filter(str.isdigit, action.text()))  # 获取摄像头号，去除非数字字符
+            self.yolo_predict.source = selected_stream_source
+            self.show_status(f'摄像头设备:{action.text()}')
+            # DialogOver(parent=self, text=f"当前摄像头为: {action.text()}", title="摄像头选择成功", flags="success")
 
     # select network source
     def chose_rtsp(self):
@@ -750,6 +850,70 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         else:
             sys.exit(0)
 
+    def img_predict(self):
+
+        # if check_url(self.yolo_predict.source):
+        #     DialogOver(parent=self, text="目标路径含有中文！", title="程序取消", flags="danger")
+        #     return
+
+        self.run_button.setChecked(False)  # 按钮
+        # 读取照片
+        image = cv2.imread(self.yolo_predict.source)
+        org_img = image.copy()
+        # 加载模型
+        model = self.yolo_predict.load_yolo_model()
+        # 获取数据源
+        iter_model = iter(model.track(source=image, show=False))
+        result = next(iter_model)  # 这里是检测的核心，
+        # 如果没有目标
+        if result.boxes.id is None:
+            # DialogOver(parent=self, text="该图片中没有要检测的目标哟！", title="运行完成", flags="warning")
+            self.show_image(image, self.pre_video)
+            self.show_image(image, self.res_video)
+            self.yolo_predict.source = ''
+            return
+
+        # 如果有目标
+        detections = sv.Detections.from_yolov8(result)
+        detections.tracker_id = result.boxes.id.cpu().numpy().astype(int)
+        # 画标签
+        labels_write, img_box = self.yolo_predict.creat_labels(detections, image, model)
+
+        # 显示信息 —— 类别数 & 总数
+        self.Class_num.setText(str(self.yolo_predict.get_class_number(detections)))
+        self.Target_num.setText(str(len(detections.tracker_id)))
+        # 显示图片
+        self.show_image(org_img, self.pre_video)  # left
+        self.show_image(img_box, self.res_video)  # right
+        self.yolo_predict.source = ''
+        # DialogOver(parent=self, text="图片检测完成", title="运行成功", flags="success")
+
+        # 保存图片
+        if self.yolo_predict.save_res:
+            # check_path(self.config.save_res_path) # 检查保存路径
+            # 存在同名文件，自增 self.image_id 直至文件不存在
+            while os.path.exists(f"{self.config.save_res_path}/image_result_{self.image_id}.jpg"):
+                self.image_id += 1
+            # 将 BGR 格式的 frame 转换为 RGB 格式
+            rgb_frame = cv2.cvtColor(img_box, cv2.COLOR_BGR2RGB)
+            # 把 rgb_frame 转换为 numpy格式 就行了
+            numpy_frame = np.array(rgb_frame)
+            Image.fromarray(numpy_frame).save(f"./{self.config.save_res_path}/image_result_{self.image_id}.jpg")
+
+        # 存储labels里的信息
+        if self.yolo_predict.save_txt:
+            # check_path(self.config.save_txt_path) # 检查保存路径
+            # 存在同名文件，自增 self.txt_id 直至文件不存在
+            while os.path.exists(f"{self.config.save_txt_path}/result_{self.txt_id}.jpg"):
+                self.txt_id += 1
+
+            with open(f'{self.config.save_txt_path}/result_{self.txt_id}.txt', 'a') as f:
+                f.write('当前时刻屏幕信息:' +
+                        str(labels_write) +
+                        f'检测时间: {datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")}' +
+                        f' 路段通过的目标总数: {len(detections.tracker_id)}')
+                f.write('\n')
+        return
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
