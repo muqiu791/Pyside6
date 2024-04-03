@@ -1,5 +1,6 @@
 <RCC>
   <qresource prefix="all">
+    <file>img/web.png</file>
     <file>img/pause.png</file>
     <file>img/model.png</file>
     <file>img/save.png</file>
