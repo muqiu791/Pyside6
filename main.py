@@ -58,6 +58,7 @@ import datetime
 import numpy as np
 import time
 import cv2
+import onnxruntime as ort
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -134,6 +135,8 @@ class YoloPredictor(BasePredictor, QObject):
             text_scale=0.5,  # 调整文本的缩放比例
         )
 
+        self.ort_session = None
+
     # 点击开始检测按钮后的检测事件
     @smart_inference_mode()  # 一个修饰器，用来开启检测模式：如果torch>=1.9.0，则执行torch.inference_mode()，否则执行torch.no_grad()
     def run(self):
@@ -149,7 +152,8 @@ class YoloPredictor(BasePredictor, QObject):
         if self.save_res:
             self.check_path(self.save_res_path)
 
-        model = self.load_yolo_model()
+        self.yolo2main_status_msg.emit('正在加载模型...')
+        model=self.load_yolo_model()
 
         # 获取数据源 （不同的类型获取不同的数据源）
         iter_model = iter(
@@ -195,7 +199,6 @@ class YoloPredictor(BasePredictor, QObject):
                     self.yolo2main_status_msg.emit('检测终止')
                     self.release_capture()  # 这里是为了终止使用摄像头检测函数的线程，改了yolo源码
                     break
-
 
             # 检测截止（本地文件检测）
             except StopIteration:
@@ -323,7 +326,6 @@ class YoloPredictor(BasePredictor, QObject):
             self.setup_model(self.new_model_name)
             self.used_model_name = self.new_model_name
         return YOLO(self.new_model_name)
-
     # 画标签到图像上
     def creat_labels(self, detections, img_box, model):
         # 要画出来的信息
