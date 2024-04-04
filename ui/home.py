@@ -196,30 +196,6 @@ class Ui_MainWindow(object):
 
         self.verticalLayout_5.addWidget(self.src_cam_button)
 
-        self.src_rtsp_button = QPushButton(self.MenuBox)
-        self.src_rtsp_button.setObjectName(u"src_rtsp_button")
-        self.src_rtsp_button.setMinimumSize(QSize(0, 45))
-        self.src_rtsp_button.setCursor(QCursor(Qt.PointingHandCursor))
-        self.src_rtsp_button.setAutoFillBackground(False)
-        self.src_rtsp_button.setStyleSheet(u"QPushButton{\n"
-"background-image: url(:/all/img/RTSP.png);\n"
-"background-repeat: no-repeat;\n"
-"background-position: left center;\n"
-"border: none;\n"
-"border-left: 23px solid transparent;\n"
-"\n"
-"text-align: center;\n"
-"padding-left: 0px;\n"
-"color: rgba(255, 255, 255, 199);\n"
-"font: 700 12pt \"Nirmala UI\";\n"
-"}\n"
-"\n"
-"QPushButton:hover{\n"
-"background-color: rgba(114, 129, 214, 59);\n"
-"}")
-
-        self.verticalLayout_5.addWidget(self.src_rtsp_button)
-
         self.src_web_button = QPushButton(self.MenuBox)
         self.src_web_button.setObjectName(u"src_web_button")
         self.src_web_button.setMinimumSize(QSize(0, 45))
@@ -1577,25 +1553,24 @@ class Ui_MainWindow(object):
         MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"MainWindow", None))
         self.Author.setText("")
         self.Title.setText(QCoreApplication.translate("MainWindow", u"YoloSide", None))
-        self.ToggleBotton.setText(QCoreApplication.translate("MainWindow", u"Hide", None))
-        self.src_file_button.setText(QCoreApplication.translate("MainWindow", u"Local File", None))
+        self.ToggleBotton.setText(QCoreApplication.translate("MainWindow", u"\u6536\u8d77", None))
+        self.src_file_button.setText(QCoreApplication.translate("MainWindow", u"\u672c\u5730\u6587\u4ef6", None))
         self.src_cam_button.setText(QCoreApplication.translate("MainWindow", u"Camera", None))
-        self.src_rtsp_button.setText(QCoreApplication.translate("MainWindow", u"Rtsp", None))
         self.src_web_button.setText(QCoreApplication.translate("MainWindow", u"Web", None))
         self.VersionLabel.setText(QCoreApplication.translate("MainWindow", u"Version: 1.0", None))
-        self.explain_title.setText(QCoreApplication.translate("MainWindow", u"YoloSide App  \u2013  A Graphical User Interface For YoloV8", None))
+        self.explain_title.setText(QCoreApplication.translate("MainWindow", u"\u4e95\u76d6\u8bc6\u522b\u754c\u9762", None))
         self.settings_button.setText("")
         self.min_sf.setText("")
         self.max_sf.setText("")
         self.close_button.setText("")
-        self.char_label.setText(QCoreApplication.translate("MainWindow", u"Detection", None))
-        self.label_5.setText(QCoreApplication.translate("MainWindow", u"Total Classes", None))
+        self.char_label.setText(QCoreApplication.translate("MainWindow", u"\u68c0\u6d4b", None))
+        self.label_5.setText(QCoreApplication.translate("MainWindow", u"\u603b\u7c7b\u522b\u6570", None))
         self.Class_num.setText("")
-        self.label_6.setText(QCoreApplication.translate("MainWindow", u"Total Targets", None))
+        self.label_6.setText(QCoreApplication.translate("MainWindow", u"\u603b\u76ee\u6807\u6570", None))
         self.Target_num.setText("")
-        self.label_7.setText(QCoreApplication.translate("MainWindow", u"Fps", None))
+        self.label_7.setText(QCoreApplication.translate("MainWindow", u"\u5e27\u7387", None))
         self.fps_label.setText("")
-        self.label_8.setText(QCoreApplication.translate("MainWindow", u"Use Model", None))
+        self.label_8.setText(QCoreApplication.translate("MainWindow", u"\u5f53\u524d\u6a21\u578b", None))
         self.Model_name.setText("")
         self.pre_video.setText("")
         self.res_video.setText("")

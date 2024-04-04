@@ -49,7 +49,8 @@ from ultralytics.utils.files import increment_path
 from ultralytics.cfg import get_cfg
 from ultralytics.utils.checks import check_imshow
 
-from PySide6.QtCore import Signal, QObject
+from PySide6.QtCore import Signal, QObject, Qt
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QCheckBox, QPushButton, QMessageBox
 
 from PIL import Image
 from pathlib import Path
@@ -76,7 +77,7 @@ class YoloPredictor(BasePredictor, QObject):
     yolo2main_progress = Signal(int)  # 进度条
     yolo2main_class_num = Signal(int)  # 当前帧类别数
     yolo2main_target_num = Signal(int)  # 当前帧目标数
-
+    non_good_detected = Signal()
 
     def __init__(self, cfg=DEFAULT_CFG, overrides=None):
         super(YoloPredictor, self).__init__()
@@ -128,9 +129,9 @@ class YoloPredictor(BasePredictor, QObject):
 
         # 设置线条样式    厚度 & 缩放大小
         self.box_annotator = sv.BoxAnnotator(
-            thickness=2,
-            text_thickness=1,
-            text_scale=0.5
+            thickness=2,  # 增加边界框和文本的厚度
+            text_thickness=1,  # 增加文本的厚度
+            text_scale=0.5,  # 调整文本的缩放比例
         )
 
     # 点击开始检测按钮后的检测事件
@@ -236,23 +237,18 @@ class YoloPredictor(BasePredictor, QObject):
                 xyxy = detections.xyxy  # 位置
                 self.sum_of_count = len(id)  # 目标总数
 
-                # 轨迹绘制部分 @@@@@@@@@@@@@@@@@@@@@@@@@@@@
-                if self.show_trace:
-                    img_trail = np.zeros((height, width, 3), dtype='uint8')  # 黑布
-                    identities = id
-                    grid_color = (255, 255, 255)
-                    line_width = 1
-                    grid_size = 100
-                    for y in range(0, height, grid_size):
-                        cv2.line(img_trail, (0, y), (width, y), grid_color, line_width)
-                    for x in range(0, width, grid_size):
-                        cv2.line(img_trail, (x, 0), (x, height), grid_color, line_width)
-                    # draw_trail(img_trail, xyxy, model.model.names, id, identities)
-                else:
-                    img_trail = img_res  # 显示原图
+                img_trail = img_res  # 显示原图
+
+                # 收集检测到的所有类别
+                detected_classes = [model.model.names[i] for i in detections.class_id]
+
 
                 # 画标签到图像上（并返回要写下的信息
                 labels_write, img_box = self.creat_labels(detections, img_box , model)
+
+                # 检测逻辑...
+                if "good" not in detected_classes:  # 假设detected_classes包含了所有检测到的类别
+                    self.non_good_detected.emit()  # 如果检测到的类别中不包含"good"，发出信号
 
 
             # 写入txt——存储labels里的信息
@@ -293,43 +289,6 @@ class YoloPredictor(BasePredictor, QObject):
 
             return img_res, result, height, width
 
-    # 单目标检测窗口开启
-    def open_target_tracking(self, detections, img_res):
-        try:
-            # 单目标追踪 ！！！！！
-            result_cropped = self.single_object_tracking(detections, img_res)
-            # print(result_cropped)
-            cv2.imshow(f'OBJECT-ID:{self.lock_id}', result_cropped)
-            cv2.moveWindow(f'OBJECT-ID:{self.lock_id}', 0, 0)
-            # press esc to quit
-            if cv2.waitKey(5) & 0xFF == 27:
-                self.lock_id = None
-                cv2.destroyAllWindows()
-        except:
-            cv2.destroyAllWindows()
-            pass
-
-    # 单目标跟踪
-    def single_object_tracking(self, detections, img_box):
-        store_xyxy_for_id = {}
-        for xyxy, id in zip(detections.xyxy, detections.tracker_id):
-            store_xyxy_for_id[id] = xyxy
-            mask = np.zeros_like(img_box)
-        try:
-            if self.lock_id not in detections.tracker_id:
-                cv2.destroyAllWindows()
-                self.lock_id = None
-            x1, y1, x2, y2 = int(store_xyxy_for_id[self.lock_id][0]), int(store_xyxy_for_id[self.lock_id][1]), int(
-                store_xyxy_for_id[self.lock_id][2]), int(store_xyxy_for_id[self.lock_id][3])
-            cv2.rectangle(mask, (x1, y1), (x2, y2), (255, 255, 255), -1)
-            result_mask = cv2.bitwise_and(img_box, mask)
-            result_cropped = result_mask[y1:y2, x1:x2]
-            result_cropped = cv2.resize(result_cropped, (256, 256))
-            return result_cropped
-
-        except:
-            cv2.destroyAllWindows()
-            pass
 
     def check_path(path):
         if not os.path.exists(path):
@@ -368,9 +327,13 @@ class YoloPredictor(BasePredictor, QObject):
     # 画标签到图像上
     def creat_labels(self, detections, img_box, model):
         # 要画出来的信息
+        # labels_draw = [
+        #     f"ID: {tracker_id} {model.model.names[class_id]}"
+        #     for _, _, confidence, class_id, tracker_id in detections
+        # ]
         labels_draw = [
-            f"ID: {tracker_id} {model.model.names[class_id]}"
-            for _, _, confidence, class_id, tracker_id in detections
+            f"ID: {tracker_id} CLS: {model.model.names[class_id]} CF: {confidence:0.2f}"
+            for _,_,confidence,class_id,tracker_id in detections
         ]
         '''
         如果Torch装的是cuda版本的话：302行的代码需改成：
@@ -380,9 +343,13 @@ class YoloPredictor(BasePredictor, QObject):
         ]
         '''
         # 存储labels里的信息
+        # labels_write = [
+        #     f"目标ID: {tracker_id} 目标类别: {class_id} 置信度: {confidence:0.2f}"
+        #     for _, _, confidence, class_id, tracker_id in detections
+        # ]
         labels_write = [
-            f"目标ID: {tracker_id} 目标类别: {class_id} 置信度: {confidence:0.2f}"
-            for _, _, confidence, class_id, tracker_id in detections
+            f"ID: {tracker_id} CLASS: {model.model.names[class_id]} CF: {confidence:0.2f}"
+            for _, _,  confidence, class_id, tracker_id in detections
         ]
         '''
           如果Torch装的是cuda版本的话：314行的代码需改成：
@@ -452,6 +419,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.yolo_predict.yolo2main_progress.connect(lambda x: self.progress_bar.setValue(x))
         self.main2yolo_begin_sgl.connect(self.yolo_predict.run)
         self.yolo_predict.moveToThread(self.yolo_thread)
+        self.yolo_predict.non_good_detected.connect(self.show_non_good_warning)
+
 
         # Model parameters
         self.model_box.currentTextChanged.connect(self.change_model)
@@ -471,8 +440,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Select detection source
         self.src_file_button.clicked.connect(self.open_src_file)  # select local file
         self.src_cam_button.clicked.connect(self.chose_cam)#chose_cam
-        self.src_rtsp_button.clicked.connect(self.show_status("The function has not yet been implemented."))#chose_rtsp
-        self.src_web_button.clicked.connect(self.draw_china_map)#chose_web
+        # self.src_rtsp_button.clicked.connect(self.rtsp_seletction)#chose_rtsp
+        self.src_web_button.clicked.connect(self.show_status("The function has not yet been implemented."))#chose_web
         # self.src_cam_button.clicked.connect(self.show_status("The function has not yet been implemented."))#chose_cam
         # self.src_rtsp_button.clicked.connect(self.show_status("The function has not yet been implemented."))#chose_rtsp
 
@@ -485,6 +454,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.save_txt_button.toggled.connect(self.is_save_txt)  # Save label option
         self.ToggleBotton.clicked.connect(lambda: UIFuncitons.toggleMenu(self, True))   # left navigation button
         self.settings_button.clicked.connect(lambda: UIFuncitons.settingBox(self, True))   # top right settings button
+
+        self.show_warning_again = True  # 新增状态变量
 
         # initialization
         self.load_config()
@@ -579,7 +550,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.main2yolo_begin_sgl.emit()
         # 暂停
         else:
-            # self.draw_thread.pause()  # 折线图暂停
             self.yolo_predict.continue_dtc = False
             self.show_status("暂停...")
             # DialogOver(parent=self, text="已暂停检测", title="运行暂停", flags="warning")
@@ -666,6 +636,27 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.show_status(f'摄像头设备:{action.text()}')
             # DialogOver(parent=self, text=f"当前摄像头为: {action.text()}", title="摄像头选择成功", flags="success")
 
+    def rtsp_seletction(self):
+        self.rtsp_window = Window()
+        self.rtsp_window.rtspEdit.setText(self.rtsp_ip)
+        self.rtsp_window.show()
+        # 如果点击则加载RTSP
+        self.rtsp_window.rtspButton.clicked.connect(lambda: self.load_rtsp(self.rtsp_window.rtspEdit.text()))
+
+        # 2、加载RTSP
+
+    def load_rtsp(self, ip):
+        ip = "rtsp://admin:admin888@192.168.1.2:555"
+        MessageBox(self.close_button, title='提示', text='加载 rtsp...', time=1000, auto=True).exec()
+        self.stop()  # 关闭YOLO线程
+
+        self.yolo_predict.source = ip
+        self.rtsp_ip = ip  # 写会ip
+        self.rtsp_window.close()
+
+        # 状态显示
+        self.show_status(f'加载rtsp地址:{ip}')
+        # DialogOver(parent=self, text=f"rtsp地址为: {ip}", title="RTSP加载成功", flags="success")
     # select network source
     def chose_rtsp(self):
         self.rtsp_window = Window()
@@ -698,35 +689,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.rtsp_window.close()
         except Exception as e:
             self.show_status('%s' % e)
-
-    def draw_china_map(self):
-        # 读取美国省界的Shapefile
-        usa_map = gpd.read_file('gadm36_USA_shp/gadm36_USA_2.shp')
-
-        # 绘制美国地图
-        fig, ax = plt.subplots(figsize=(10, 10))
-        usa_map.plot(ax=ax)
-
-        # 设置地图边界颜色和宽度
-        usa_map.boundary.plot(ax=ax, edgecolor='black', linewidth=1)
-
-        # 设置标题
-        plt.title('USA Map with State Boundaries')
-
-        # 设置坐标轴的范围，聚焦于美国的主体部分
-        ax.set_xlim(-130, -65)  # 调整这些值以聚焦在所需的区域
-        ax.set_ylim(24, 50)
-
-        # 隐藏坐标轴
-        plt.axis('off')
-
-        # 保存为PNG图片
-        plt.savefig('img/china_map.png', bbox_inches='tight')
-
-        # 将图片加载到PySide6的界面中，例如显示在pre_image QLabel中
-        pixmap = QPixmap('img/china_map.png')
-        self.pre_video.setPixmap(pixmap)
-        self.pre_video.setScaledContents(True)  # 根据QLabel大小调整图片大小
 
     # Save test result button--picture/video
     def is_save_res(self):
@@ -943,10 +905,76 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             with open(f'{self.config.save_txt_path}/result_{self.txt_id}.txt', 'a') as f:
                 f.write('当前时刻屏幕信息:' +
                         str(labels_write) +
-                        f'检测时间: {datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")}' +
-                        f' 路段通过的目标总数: {len(detections.tracker_id)}')
+                        f'检测时间: {datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")}')
                 f.write('\n')
         return
+
+    def show_non_good_warning(self,):
+        if self.show_warning_again:
+            self.yolo_predict.continue_dtc = False
+            self.show_status("暂停...")
+            self.run_button.setChecked(False)
+
+            # 使用自定义的对话框来显示警告
+            dialog = WarningDialog(self)
+            if dialog.exec_():  # 如果用户选择了"不再提示"
+                self.show_warning_again = False  # 更新状态，不再显示警告
+
+
+class WarningDialog(QDialog):
+    def __init__(self, parent=None):
+        super(WarningDialog, self).__init__(parent)
+        self.setWindowTitle("检测结果")
+        self.setMinimumSize(300, 150)  # 设置对话框的最小尺寸
+        self.setStyleSheet("QDialog { background-color: #f0f0f0; }")  # 对话框背景色
+
+        self.layout = QVBoxLayout(self)
+
+        self.label = QLabel("检测到异常类别！", self)
+        # 设置标签字体大小，文本颜色为红色
+        self.label.setStyleSheet("""
+            QLabel { 
+                font-size: 16px; 
+                color: red;
+            }
+        """)
+        # 设置标签文本居中
+        self.label.setAlignment(Qt.AlignCenter)
+        self.layout.addWidget(self.label)
+
+        self.checkbox = QCheckBox("不再提示此警告", self)
+        self.checkbox.setStyleSheet("QCheckBox { font-size: 14px; }")  # 复选框字体大小
+        self.layout.addWidget(self.checkbox)
+
+        self.button = QPushButton("确定", self)
+        self.button.setStyleSheet(
+            """
+            QPushButton {
+                font-size: 14px;
+                color: white;
+                background-color: #007bff;
+                border-radius: 10px;
+                padding: 10px;
+            }
+            QPushButton:hover {
+                background-color: #0056b3;
+            }
+            """
+        )  # 按钮样式
+        self.button.clicked.connect(self.accept)
+        self.layout.addWidget(self.button)
+
+        self.checkbox_state = False
+        self.checkbox.stateChanged.connect(self.update_checkbox_state)
+
+    def update_checkbox_state(self, state):
+        self.checkbox_state = state == Qt.Checked
+
+    def exec_(self):
+        super(WarningDialog, self).exec_()
+        return self.checkbox.isChecked()
+
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

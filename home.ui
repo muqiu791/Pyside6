@@ -204,7 +204,7 @@ color: rgba(255, 255, 255, 255);</string>
             <property name="frameShadow">
              <enum>QFrame::Raised</enum>
             </property>
-            <layout class="QVBoxLayout" name="verticalLayout_5" stretch="0,1,0,0,0,0">
+            <layout class="QVBoxLayout" name="verticalLayout_5" stretch="0,1,0,0,0">
              <property name="spacing">
               <number>15</number>
              </property>
@@ -288,7 +288,7 @@ background-color: rgba(114, 129, 214, 59);
 }</string>
                </property>
                <property name="text">
-                <string>Hide</string>
+                <string>收起</string>
                </property>
                <property name="icon">
                 <iconset theme="zoom-out">
@@ -335,7 +335,7 @@ background-color: rgba(114, 129, 214, 59);
 }</string>
                </property>
                <property name="text">
-                <string>Local File</string>
+                <string>本地文件</string>
                </property>
               </widget>
              </item>
@@ -370,43 +370,6 @@ background-color: rgba(114, 129, 214, 59);
                </property>
                <property name="text">
                 <string>Camera</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="src_rtsp_button">
-               <property name="minimumSize">
-                <size>
-                 <width>0</width>
-                 <height>45</height>
-                </size>
-               </property>
-               <property name="cursor">
-                <cursorShape>PointingHandCursor</cursorShape>
-               </property>
-               <property name="autoFillBackground">
-                <bool>false</bool>
-               </property>
-               <property name="styleSheet">
-                <string notr="true">QPushButton{
-background-image: url(:/all/img/RTSP.png);
-background-repeat: no-repeat;
-background-position: left center;
-border: none;
-border-left: 23px solid transparent;
-
-text-align: center;
-padding-left: 0px;
-color: rgba(255, 255, 255, 199);
-font: 700 12pt &quot;Nirmala UI&quot;;
-}
-
-QPushButton:hover{
-background-color: rgba(114, 129, 214, 59);
-}</string>
-               </property>
-               <property name="text">
-                <string>Rtsp</string>
                </property>
               </widget>
              </item>
@@ -647,7 +610,7 @@ background-color: rgba(255, 255, 255,0);
                 <string notr="true">font: 700 italic 11pt &quot;Segoe UI&quot;;</string>
                </property>
                <property name="text">
-                <string>YoloSide App  –  A Graphical User Interface For YoloV8</string>
+                <string>井盖识别界面</string>
                </property>
                <property name="alignment">
                 <set>Qt::AlignCenter</set>
@@ -876,7 +839,7 @@ QPushButton:pressed {
                   <string notr="true">padding-left:12px;</string>
                  </property>
                  <property name="text">
-                  <string>Detection</string>
+                  <string>检测</string>
                  </property>
                 </widget>
                </item>
@@ -1011,7 +974,7 @@ padding-left:12px;
 font: 700 italic 16pt &quot;Segoe UI&quot;;</string>
                           </property>
                           <property name="text">
-                           <string>Total Classes</string>
+                           <string>总类别数</string>
                           </property>
                           <property name="alignment">
                            <set>Qt::AlignCenter</set>
@@ -1205,7 +1168,7 @@ padding-left:12px;
 font: 700 italic 16pt &quot;Segoe UI&quot;;</string>
                           </property>
                           <property name="text">
-                           <string>Total Targets</string>
+                           <string>总目标数</string>
                           </property>
                           <property name="alignment">
                            <set>Qt::AlignCenter</set>
@@ -1402,7 +1365,7 @@ font: 700 italic 16pt &quot;Segoe UI&quot;;</string>
                            <number>-1</number>
                           </property>
                           <property name="text">
-                           <string>Fps</string>
+                           <string>帧率</string>
                           </property>
                           <property name="alignment">
                            <set>Qt::AlignCenter</set>
@@ -1602,7 +1565,7 @@ font: 700 italic 16pt &quot;Segoe UI&quot;;</string>
                            <number>-1</number>
                           </property>
                           <property name="text">
-                           <string>Use Model</string>
+                           <string>当前模型</string>
                           </property>
                           <property name="alignment">
                            <set>Qt::AlignCenter</set>
